@@ -1,0 +1,135 @@
+package Analyzers;
+
+import java_cup.runtime.*;
+import java.util.LinkedList;
+
+import Tree.Instruction;
+import Tree.Declaration;
+import Tree.Print;
+import Tree.Expression;
+import Tree.If;
+import Tree.Function;
+import Tree.FunctionCall;
+import Tree.Return;
+import Tree.Expression.Expression_type;
+import Enviroment.Sym.EnumType;
+
+parser code
+{:
+    public LinkedList<Instruction> AST;
+
+    public void syntax_error(Symbol s) {
+        System.err.println("El analizador se recupero tras el error\nError en la Línea " + (s.right+1) + " Columna " + (s.left+1) + ". Identificador " + s.value + " no reconocido." );
+    }
+
+    public void unrecovered_syntax_error(Symbol s) throws java.lang.Exception {
+        System.err.println("El analizador No se recupero tras el error\nError en la Línea " + (s.right+1) + "Columna "+ (s.left+1)+ ". Identificador " + s.value + " no reconocido.");
+    }
+:}
+
+
+terminal String int_, if_, return_, println_;
+terminal String mas, menos, por, mayorQue, menorQue, mayorIgual, menorIgual, igualIgual, and;
+terminal String coma, puntoComa,  parIzq, parDer, llaveAbre, llaveCierre;
+terminal String entero, id;
+
+non terminal INICIO;
+non terminal LinkedList<Instruction> INSTRUCCIONES;
+non terminal LinkedList<Declaration> PARAMETROS;
+non terminal LinkedList<Expression> PARAMS_VALUE;
+non terminal Instruction INSTRUCCION;
+non terminal Expression EXPRESION;
+non terminal Print IMPRIMIR;
+non terminal If IF;
+non terminal Function FUNCTION;
+non terminal EnumType TIPO;
+non terminal FunctionCall FUNCTION_VOID_CALL;
+
+precedence left and;
+precedence left igualIgual;
+precedence nonassoc mayorQue, menorQue, mayorIgual, menorIgual;
+precedence left mas, menos;
+precedence left por;
+
+start with INICIO;
+
+INICIO::= INSTRUCCIONES:i
+    {:
+        parser.AST = i;
+    :}
+;
+
+INSTRUCCIONES::= INSTRUCCIONES:a INSTRUCCION:b
+    {:
+        RESULT = a;
+        RESULT.add(b);
+    :}
+    | INSTRUCCION:a
+    {:
+        RESULT = new LinkedList<>();
+        RESULT.add(a);
+    :}
+;
+
+INSTRUCCION::= IMPRIMIR:i puntoComa {: RESULT = i; :}
+    | IF:i {: RESULT = i; :}
+    | FUNCTION:f {: RESULT = f; :}
+    | EXPRESION:e puntoComa {: RESULT = e; :}
+    | return_:r EXPRESION:e puntoComa {: RESULT = new Return(e, rright, rleft - 1); :}
+;
+
+IMPRIMIR::= println_:p parIzq EXPRESION:e parDer {: RESULT = new Print(e, pright, pleft - 1); :}
+;
+
+IF::= if_:a parIzq EXPRESION:e parDer llaveAbre INSTRUCCIONES:i llaveCierre {: RESULT = new If(e, i, aright, aleft - 1); :}
+;
+
+FUNCTION::= TIPO:t id:i parIzq PARAMETROS:p parDer llaveAbre INSTRUCCIONES:ins llaveCierre {: RESULT = new Function(i, t, ins, p, tright, tleft - 1); :}
+;
+
+TIPO::= int_ {: RESULT = EnumType.entero; :}
+;
+
+FUNCTION_VOID_CALL::= id:i parIzq parDer {: RESULT = new FunctionCall(i, null, iright, ileft - 1); :}
+    | id:i parIzq PARAMS_VALUE:pv parDer {: RESULT = new FunctionCall(i, pv, iright, ileft - 1); :}
+;
+
+PARAMS_VALUE::= PARAMS_VALUE:pv coma EXPRESION:e
+    {:
+        RESULT = pv;
+        RESULT.add(e);
+    :}
+    | EXPRESION:e
+    {:
+        RESULT = new LinkedList<>();
+        RESULT.add(e);
+    :}
+;
+
+PARAMETROS::= PARAMETROS:p coma TIPO:t id:i
+    {:
+        RESULT = p;
+        RESULT.add(new Declaration(i, t, null, tright, tleft - 1));
+    :}
+    |  TIPO:t id:i
+    {:
+        RESULT = new LinkedList<>();
+        RESULT.add(new Declaration(i, t, null, tright, tleft - 1));
+    :}
+;
+
+EXPRESION::= EXPRESION:e1 mas EXPRESION:e2 {: RESULT = new Expression(e1, e2, Expression_type.SUMA, e1right, e1left - 1); :}
+    | EXPRESION:e1 menos EXPRESION:e2 {: RESULT = new Expression(e1, e2, Expression_type.RESTA, e1right, e1left - 1); :}
+    | EXPRESION:e1 por EXPRESION:e2 {: RESULT = new Expression(e1, e2, Expression_type.MULTIPLICACION, e1right, e1left - 1); :}
+    | EXPRESION:e1 mayorQue EXPRESION:e2 {: RESULT = new Expression(e1, e2, Expression_type.MAYOR_QUE, e1right, e1left - 1); :}
+    | EXPRESION:e1 menorQue EXPRESION:e2 {: RESULT = new Expression(e1, e2, Expression_type.MENOR_QUE, e1right, e1left - 1); :}
+    | EXPRESION:e1 mayorIgual EXPRESION:e2 {: RESULT = new Expression(e1, e2, Expression_type.MAYOR_IGUAL, e1right, e1left - 1); :}
+    | EXPRESION:e1 menorIgual EXPRESION:e2 {: RESULT = new Expression(e1, e2, Expression_type.MENOR_IGUAL, e1right, e1left - 1); :}
+    | EXPRESION:e1 igualIgual EXPRESION:e2 {: RESULT = new Expression(e1, e2, Expression_type.IGUAL_IGUAL, e1right, e1left - 1); :}
+    | EXPRESION:e1 and EXPRESION:e2 {: RESULT = new Expression(e1, e2, Expression_type.AND, e1right, e1left - 1); :}
+    | parIzq EXPRESION:e1 parDer {: RESULT = e1; :}
+    | entero:e {: RESULT = new Expression(((long)(Integer.parseInt(e))), eright, eleft - 1); :}
+    | id:i {: RESULT = new Expression(i, Expression_type.IDENTIFICADOR, iright, ileft - 1); :}
+    | FUNCTION_VOID_CALL:fvc {: RESULT = new Expression(fvc.id, fvc.parametersExpression, Expression_type.FUNCION, fvc.line, fvc.column); :}
+;
+
